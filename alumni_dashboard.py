@@ -37,7 +37,7 @@ st.markdown("""
 EXCEL_FILE = "alumni_data.xlsx"
 
 st.title("Shaping STEM Futures")
-st.markdown("#### Alumni Dashboard")
+st.markdown("#### Alumni Impact - Dashboard")
 st.markdown("---")
 
 st.markdown('<div class="placeholder">⚠️ <b>Placeholder dashboard.</b> Real alumni data has not been added yet. Replace the sample data in <code>alumni_data.xlsx</code> to populate this dashboard.</div>', unsafe_allow_html=True)
