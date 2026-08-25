@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 import os
 
@@ -40,7 +39,7 @@ else:
 # Clean year data
 df["Award Year"] = pd.to_numeric(df["Award Year"], errors="coerce").fillna(2026).astype(int)
 
-# Classify pathways dynamically if missing
+# Ensure Pathway Category exists
 if "Pathway Category" not in df.columns:
     def classify_pathway(position):
         pos = str(position).lower()
@@ -72,7 +71,7 @@ with col4:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# ─── 2. BAR CHART WITH COMPETITION FILTER ───────────────────────────────────
+# ─── 2. PARTICIPATION BAR CHART ──────────────────────────────────────────────
 st.markdown("### Alumni Participation Over Time")
 
 view_option = st.radio(
@@ -94,12 +93,15 @@ else:
     chart_title = "Combined Alumni Count by Year (All Competitions)"
     bar_color = "#2d7a5f"
 
-fig_bar = px.bar(
-    df_chart, x="Award Year", y="Alumni Count", text="Alumni Count",
-    title=chart_title
-)
-fig_bar.update_traces(marker_color=bar_color, textposition="outside")
+fig_bar = go.Figure()
+fig_bar.add_trace(go.Bar(
+    x=df_chart["Award Year"], y=df_chart["Alumni Count"],
+    text=df_chart["Alumni Count"], textposition="outside",
+    marker_color=bar_color
+))
+
 fig_bar.update_layout(
+    title=chart_title,
     plot_bgcolor="white", paper_bgcolor="white",
     font_family="DM Sans", title_font_size=16,
     margin=dict(t=50, b=20),
@@ -109,58 +111,60 @@ st.plotly_chart(fig_bar, use_container_width=True)
 
 st.markdown("---")
 
-# ─── 3. COMPETITION VISUALIZATIONS ───────────────────────────────────────────
-st.markdown("### Competition Visualizations")
+# ─── 3. COMPETITION GROWTH TREND (SINGLE LINE CHART) ─────────────────────────
+st.markdown("### Participant Growth Comparison")
 
-col_left, col_right = st.columns(2)
+# Build pivot dataframe for line chart
+df_growth = df.groupby(["Award Year", "Competition Type"]).size().unstack(fill_value=0).reset_index()
+if "Start Talking" not in df_growth.columns:
+    df_growth["Start Talking"] = 0
+if "Design for Change" not in df_growth.columns:
+    df_growth["Design for Change"] = 0
 
-with col_left:
-    df_st = df[df["Competition Type"] == "Start Talking"]
-    st_cats = df_st["Award Category"].value_counts().reset_index()
-    st_cats.columns = ["Category", "Count"]
-    
-    fig_st = px.pie(
-        st_cats, names="Category", values="Count",
-        title="Start Talking: Winner vs People's Choice",
-        color_discrete_sequence=["#2d7a5f", "#a8d5c2", "#52a384"]
-    )
-    fig_st.update_traces(textinfo="percent+label", hole=0.4)
-    fig_st.update_layout(
-        plot_bgcolor="white", paper_bgcolor="white",
-        font_family="DM Sans", title_font_size=16, margin=dict(t=50, b=20)
-    )
-    st.plotly_chart(fig_st, use_container_width=True)
+df_growth["Combined Total"] = df_growth["Start Talking"] + df_growth["Design for Change"]
 
-with col_right:
-    df_dfc = df[df["Competition Type"] == "Design for Change"]
-    dfc_trend = df_dfc.groupby("Award Year").size().reset_index(name="Participants")
-    
-    fig_dfc = px.line(
-        dfc_trend, x="Award Year", y="Participants",
-        markers=True, title="Design for Change: Participant Growth Over Time"
-    )
-    fig_dfc.update_traces(line_color="#2d7a5f", marker=dict(size=10, color="#2d7a5f"))
-    fig_dfc.update_layout(
-        plot_bgcolor="white", paper_bgcolor="white",
-        font_family="DM Sans", title_font_size=16, margin=dict(t=50, b=20),
-        xaxis=dict(tickmode='linear', dtick=1, tickformat='d')
-    )
-    st.plotly_chart(fig_dfc, use_container_width=True)
+fig_growth = go.Figure()
+
+# Line 1: Combined Total
+fig_growth.add_trace(go.Scatter(
+    x=df_growth["Award Year"], y=df_growth["Combined Total"],
+    mode="lines+markers", name="Combined Total",
+    line=dict(color="#1a1a2e", width=3),
+    marker=dict(size=8)
+))
+
+# Line 2: Start Talking
+fig_growth.add_trace(go.Scatter(
+    x=df_growth["Award Year"], y=df_growth["Start Talking"],
+    mode="lines+markers", name="Start Talking",
+    line=dict(color="#2d7a5f", width=2),
+    marker=dict(size=8)
+))
+
+# Line 3: Design for Change
+fig_growth.add_trace(go.Scatter(
+    x=df_growth["Award Year"], y=df_growth["Design for Change"],
+    mode="lines+markers", name="Design for Change",
+    line=dict(color="#a8d5c2", width=2),
+    marker=dict(size=8)
+))
+
+fig_growth.update_layout(
+    title="Participant Growth Over Time (Combined vs Start Talking vs Design for Change)",
+    plot_bgcolor="white", paper_bgcolor="white",
+    font_family="DM Sans", title_font_size=16,
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+    margin=dict(t=80, b=20),
+    xaxis=dict(tickmode='linear', dtick=1, tickformat='d')
+)
+
+st.plotly_chart(fig_growth, use_container_width=True)
 
 st.markdown("---")
 
-# ─── 4. DEFAULT REGISTRY TABLE VIEW ──────────────────────────────────────────
+# ─── 4. ALUMNI DATA REGISTRY (SHOWS ALL DATA DIRECTLY) ─────────────────────
 st.markdown("### Alumni Data Registry")
 
-table_filter = st.multiselect(
-    "Filter Registry by Competition:",
-    options=list(df["Competition Type"].unique()),
-    default=list(df["Competition Type"].unique())
-)
-
-filtered_df = df[df["Competition Type"].isin(table_filter)]
-
-# Displays: Name, Award Year, Field Enrolled In, Further Study or Industry Placement, Current Position, LinkedIn Profile
 default_columns = [
     "Full Name", 
     "Award Year", 
@@ -170,8 +174,9 @@ default_columns = [
     "LinkedIn Profile"
 ]
 
+# Renders all records directly without needing a filter
 st.dataframe(
-    filtered_df[default_columns],
+    df[default_columns],
     use_container_width=True,
     hide_index=True
 )
