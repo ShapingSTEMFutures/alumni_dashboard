@@ -1,15 +1,16 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
+import plotly.express as px
 import os
+import io
 
 st.set_page_config(
-    page_title="Shaping STEM Futures – Alumni Dashboard",
+    page_title="Shaping STEM Futures – Finalist Alumni Dashboard",
     page_icon="🎓",
     layout="wide"
 )
 
-# ─── Custom Styling ─────────────────────────────────────────────────────────
+# ─── Custom CSS Styling ─────────────────────────────────────────────────────
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;600&family=DM+Serif+Display&display=swap');
@@ -24,159 +25,254 @@ st.markdown("""
     }
     .metric-card .label { font-size: 0.8rem; color: #6b7280; text-transform: uppercase; letter-spacing: 0.08em; }
     .metric-card .value { font-size: 2.2rem; font-weight: 600; color: #1a1a2e; line-height: 1.1; }
+    .obs-card {
+        background-color: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-top: 4px solid #2d7a5f;
+        border-radius: 8px;
+        padding: 1.2rem;
+        height: 100%;
+    }
+    .obs-card h4 {
+        color: #2d7a5f;
+        margin: 0 0 0.4rem 0;
+        font-size: 1.05rem;
+        font-weight: 600;
+    }
+    .obs-card p {
+        color: #4b5563;
+        font-size: 0.92rem;
+        line-height: 1.4;
+        margin: 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-EXCEL_FILE = "alumni_data.xlsx"
+# Select dataset file dynamically
+EXCEL_FILE = "alumni_data_3.xlsx" if os.path.exists("alumni_data_3.xlsx") else "alumni_data.xlsx"
 
-# ─── Load Data ───────────────────────────────────────────────────────────────
-if os.path.exists(EXCEL_FILE):
-    df = pd.read_excel(EXCEL_FILE, sheet_name="Alumni Registry")
-else:
-    st.error(f"❌ Could not find '{EXCEL_FILE}'. Please ensure it is in your project directory.")
+# ─── 1. SAFE IN-MEMORY FILE LOADING ──────────────────────────────────────────
+if not os.path.exists(EXCEL_FILE):
+    st.error(f"❌ Could not find '{EXCEL_FILE}'. Please verify the file exists in your project directory.")
     st.stop()
 
-# Clean year data
-df["Award Year"] = pd.to_numeric(df["Award Year"], errors="coerce").fillna(2026).astype(int)
+try:
+    with open(EXCEL_FILE, "rb") as f:
+        file_bytes = io.BytesIO(f.read())
+    xls = pd.ExcelFile(file_bytes)
+    sheet_name = "Alumni Registry" if "Alumni Registry" in xls.sheet_names else xls.sheet_names[0]
+    df = pd.read_excel(file_bytes, sheet_name=sheet_name)
+except Exception as e:
+    st.error(f"Error reading file: {e}")
+    st.stop()
 
-# Ensure Pathway Category exists
-if "Pathway Category" not in df.columns:
-    def classify_pathway(position):
-        pos = str(position).lower()
-        if any(keyword in pos for keyword in ["student", "candidate", "undergraduate", "postgraduate", "scholar"]):
-            return "Further Study"
-        return "Industry Placement"
-    df["Pathway Category"] = df["Current Position / What They're Doing Now"].apply(classify_pathway)
+# Dynamic column detection
+col_name = next((c for c in df.columns if "Name" in c), df.columns[0])
+col_comp = next((c for c in df.columns if "Competition" in c), df.columns[1])
+col_year = next((c for c in df.columns if "Year" in c), None)
+col_field = next((c for c in df.columns if "Academic" in c or "Field" in c), None)
+col_pos = next((c for c in df.columns if "Position" in c or "Current" in c), None)
+col_linkedin = next((c for c in df.columns if "LinkedIn" in c), None)
 
-# ─── Header Section ──────────────────────────────────────────────────────────
+# Clean Award Year
+df["Award Year Clean"] = pd.to_numeric(df[col_year], errors="coerce").fillna(2026).astype(int)
+
+# Identify missing or untracked LinkedIn profiles
+missing_linkedin_mask = df[col_linkedin].isna() | df[col_linkedin].astype(str).str.strip().isin(['', 'nan', 'NaN', 'None', 'N/A', 'na'])
+
+# Rule: Flag untracked profiles as 'N/A'
+df.loc[missing_linkedin_mask, col_field] = "N/A"
+df.loc[missing_linkedin_mask, col_pos] = "N/A"
+df.loc[missing_linkedin_mask, col_linkedin] = "N/A"
+
+# For profiles WITH LinkedIn but NO listed position, tag as 'N/A (No Position Listed)'
+df.loc[~missing_linkedin_mask & (df[col_pos].isna() | (df[col_pos].astype(str).str.strip() == '')), col_pos] = "N/A (No Position Listed)"
+
+# Standardize LinkedIn URLs
+df.loc[~missing_linkedin_mask, col_linkedin] = df.loc[~missing_linkedin_mask, col_linkedin].astype(str).str.strip()
+
+# Categorize STEM Domain
+def derive_stem_domain(row):
+    fld = str(row[col_field]).lower()
+    pos = str(row[col_pos]).lower()
+    
+    if pos == "n/a" and fld == "n/a":
+        return "Untracked / Private Profile"
+    elif any(k in fld or k in pos for k in ["biotech", "bio", "genetics", "health", "cancer", "medical", "chemist", "microbiology", "life science"]):
+        return "Biotechnology & Life Sciences"
+    elif any(k in fld or k in pos for k in ["software", "data", "it", "information technology", "computer science", "ai", "ios"]):
+        return "Software, AI & Data Systems"
+    elif any(k in fld or k in pos for k in ["robotics", "mechatronics", "engineering", "hardware", "automation", "clean energy", "solar", "environmental"]):
+        return "Engineering, Robotics & Clean Tech"
+    else:
+        return "General Science & Education"
+
+df["STEM Domain Cluster"] = df.apply(derive_stem_domain, axis=1)
+
+# Categorize Employment Status
+def classify_employment_status(pos):
+    val = str(pos).lower()
+    if val == "n/a":
+        return "N/A (Untracked Profile)"
+    elif "n/a (no position" in val:
+        return "Not Currently Employed / Seeking Role"
+    elif any(k in val for k in ["student", "intern", "tutor", "candidate"]):
+        return "Further Study / Academic Training"
+    return "Employed (Industry & Research)"
+
+df["Employment Status"] = df[col_pos].apply(classify_employment_status)
+
+# ─── HEADER SECTION ──────────────────────────────────────────────────────────
 st.title("Shaping STEM Futures")
-st.markdown("#### Alumni Impact Dashboard")
+st.markdown("#### Finalist Alumni Impact Dashboard")
 st.markdown("---")
 
-# ─── 1. METRIC CARDS ─────────────────────────────────────────────────────────
+# ─── 2. METRIC CARDS ─────────────────────────────────────────────────────────
 total_alumni = len(df)
-industry_placements = len(df[df["Pathway Category"] == "Industry Placement"])
-further_study = len(df[df["Pathway Category"] == "Further Study"])
-fields_covered = df["Academic / STEM Field Enrolled In"].nunique()
+verifiable_profiles = len(df[~missing_linkedin_mask])
+untracked_profiles = len(df[missing_linkedin_mask])
+employed_count = len(df[df["Employment Status"] == "Employed (Industry & Research)"])
 
 col1, col2, col3, col4 = st.columns(4)
 with col1:
-    st.markdown(f'<div class="metric-card"><div class="label">Total Alumni</div><div class="value">{total_alumni}</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="metric-card"><div class="label">Total Finalist Alumni</div><div class="value">{total_alumni}</div></div>', unsafe_allow_html=True)
 with col2:
-    st.markdown(f'<div class="metric-card"><div class="label">Industry Placements</div><div class="value">{industry_placements}</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="metric-card"><div class="label">Verifiable LinkedIn Profiles</div><div class="value">{verifiable_profiles}</div></div>', unsafe_allow_html=True)
 with col3:
-    st.markdown(f'<div class="metric-card"><div class="label">Further Study</div><div class="value">{further_study}</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="metric-card"><div class="label">Untracked / Private Profiles</div><div class="value">{untracked_profiles}</div></div>', unsafe_allow_html=True)
 with col4:
-    st.markdown(f'<div class="metric-card"><div class="label">Academic Fields Covered</div><div class="value">{fields_covered}</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="metric-card"><div class="label">Employed Industry / Research</div><div class="value">{employed_count}</div></div>', unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# ─── 2. PARTICIPATION BAR CHART ──────────────────────────────────────────────
-st.markdown("### Alumni Participation Over Time")
+# ─── 3. DATASET OBSERVATION CARDS ───────────────────────────────────────────
+st.markdown("### Key Alumni Dataset Observations")
 
-view_option = st.radio(
-    "Select View:",
-    options=["Combined Total", "Start Talking", "Design for Change"],
-    horizontal=True
-)
+col_obs1, col_obs2, col_obs3 = st.columns(3)
 
-if view_option == "Start Talking":
-    df_chart = df[df["Competition Type"] == "Start Talking"].groupby("Award Year").size().reset_index(name="Alumni Count")
-    chart_title = "Start Talking Alumni Count by Year"
-    bar_color = "#2d7a5f"
-elif view_option == "Design for Change":
-    df_chart = df[df["Competition Type"] == "Design for Change"].groupby("Award Year").size().reset_index(name="Alumni Count")
-    chart_title = "Design for Change Alumni Count by Year"
-    bar_color = "#a8d5c2"
+with col_obs1:
+    st.markdown("""
+    <div class="obs-card">
+        <h4>🧬 Discipline Specialization Bias</h4>
+        <p><b>Start Talking</b> acts primarily as a pipeline for <b>Biotechnology & Life Sciences</b> talent, whereas <b>Design for Change</b> feeds into <b>Software Engineering, AI & Data Systems</b>.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col_obs2:
+    st.markdown("""
+    <div class="obs-card">
+        <h4>🏢 Institutional vs Enterprise Placement</h4>
+        <p><i>Start Talking</i> finalists transition into leading medical research institutes (WEHI, Peter Mac, Parexel), while <i>Design for Change</i> finalists move into enterprise tech (News Corp, Agilent, BAE Systems).</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col_obs3:
+    st.markdown("""
+    <div class="obs-card">
+        <h4>🔍 Profile Verification Distribution</h4>
+        <p><b>60% of finalists (24/40)</b> maintain publicly verifiable LinkedIn headlines, while <b>40% (16/40)</b> have untracked profile links flagged as <code>N/A</code> across registry fields.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+# ─── 4. INTERACTIVE STEM DOMAIN VISUALIZATION ────────────────────────────────
+st.markdown("### Interactive STEM Domain & Ecosystem Matrix")
+
+col_view_type, col_filter_comp = st.columns(2)
+
+with col_view_type:
+    selected_view = st.radio(
+        "Select Perspective to Visualize:",
+        options=["STEM Domain by Competition Track", "Employment Status Breakdown"],
+        horizontal=True
+    )
+
+with col_filter_comp:
+    comp_filter = st.selectbox(
+        "Filter Competition Cohort:",
+        options=["All Competitions", "Start Talking", "Design for Change"]
+    )
+
+if comp_filter != "All Competitions":
+    chart_df = df[df[col_comp] == comp_filter]
 else:
-    df_chart = df.groupby("Award Year").size().reset_index(name="Alumni Count")
-    chart_title = "Combined Alumni Count by Year (All Competitions)"
-    bar_color = "#2d7a5f"
+    chart_df = df
 
-fig_bar = go.Figure()
-fig_bar.add_trace(go.Bar(
-    x=df_chart["Award Year"], y=df_chart["Alumni Count"],
-    text=df_chart["Alumni Count"], textposition="outside",
-    marker_color=bar_color
-))
+if selected_view == "STEM Domain by Competition Track":
+    df_grouped = chart_df.groupby([col_comp, "STEM Domain Cluster"]).size().reset_index(name="Finalist Count")
+    
+    fig_interactive = px.bar(
+        df_grouped,
+        x="STEM Domain Cluster",
+        y="Finalist Count",
+        color=col_comp,
+        barmode="group",
+        text="Finalist Count",
+        title=f"STEM Domain Specialization ({comp_filter})",
+        color_discrete_map={
+            "Start Talking": "#2d7a5f",
+            "Design for Change": "#1a1a2e"
+        }
+    )
+    fig_interactive.update_traces(textposition="outside")
+    fig_interactive.update_layout(
+        plot_bgcolor="white", paper_bgcolor="white",
+        font_family="DM Sans", title_font_size=16,
+        margin=dict(t=50, b=20),
+        xaxis=dict(title="STEM Domain Cluster"),
+        yaxis=dict(title="Finalist Count", dtick=2)
+    )
+else:
+    df_emp_grouped = chart_df.groupby([col_comp, "Employment Status"]).size().reset_index(name="Finalist Count")
+    
+    fig_interactive = px.bar(
+        df_emp_grouped,
+        x="Employment Status",
+        y="Finalist Count",
+        color=col_comp,
+        barmode="group",
+        text="Finalist Count",
+        title=f"Employment & Training Status ({comp_filter})",
+        color_discrete_map={
+            "Start Talking": "#2d7a5f",
+            "Design for Change": "#1a1a2e"
+        }
+    )
+    fig_interactive.update_traces(textposition="outside")
+    fig_interactive.update_layout(
+        plot_bgcolor="white", paper_bgcolor="white",
+        font_family="DM Sans", title_font_size=16,
+        margin=dict(t=50, b=20),
+        xaxis=dict(title="Employment Status"),
+        yaxis=dict(title="Finalist Count", dtick=2)
+    )
 
-fig_bar.update_layout(
-    title=chart_title,
-    plot_bgcolor="white", paper_bgcolor="white",
-    font_family="DM Sans", title_font_size=16,
-    margin=dict(t=50, b=20),
-    xaxis=dict(tickmode='linear', dtick=1, tickformat='d')
-)
-st.plotly_chart(fig_bar, use_container_width=True)
-
-st.markdown("---")
-
-# ─── 3. COMPETITION GROWTH TREND (SINGLE LINE CHART) ─────────────────────────
-st.markdown("### Participant Growth Comparison")
-
-# Build pivot dataframe for line chart
-df_growth = df.groupby(["Award Year", "Competition Type"]).size().unstack(fill_value=0).reset_index()
-if "Start Talking" not in df_growth.columns:
-    df_growth["Start Talking"] = 0
-if "Design for Change" not in df_growth.columns:
-    df_growth["Design for Change"] = 0
-
-df_growth["Combined Total"] = df_growth["Start Talking"] + df_growth["Design for Change"]
-
-fig_growth = go.Figure()
-
-# Line 1: Combined Total
-fig_growth.add_trace(go.Scatter(
-    x=df_growth["Award Year"], y=df_growth["Combined Total"],
-    mode="lines+markers", name="Combined Total",
-    line=dict(color="#1a1a2e", width=3),
-    marker=dict(size=8)
-))
-
-# Line 2: Start Talking
-fig_growth.add_trace(go.Scatter(
-    x=df_growth["Award Year"], y=df_growth["Start Talking"],
-    mode="lines+markers", name="Start Talking",
-    line=dict(color="#2d7a5f", width=2),
-    marker=dict(size=8)
-))
-
-# Line 3: Design for Change
-fig_growth.add_trace(go.Scatter(
-    x=df_growth["Award Year"], y=df_growth["Design for Change"],
-    mode="lines+markers", name="Design for Change",
-    line=dict(color="#a8d5c2", width=2),
-    marker=dict(size=8)
-))
-
-fig_growth.update_layout(
-    title="Participant Growth Over Time (Combined vs Start Talking vs Design for Change)",
-    plot_bgcolor="white", paper_bgcolor="white",
-    font_family="DM Sans", title_font_size=16,
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-    margin=dict(t=80, b=20),
-    xaxis=dict(tickmode='linear', dtick=1, tickformat='d')
-)
-
-st.plotly_chart(fig_growth, use_container_width=True)
+st.plotly_chart(fig_interactive, use_container_width=True)
 
 st.markdown("---")
 
-# ─── 4. ALUMNI DATA REGISTRY (SHOWS ALL DATA DIRECTLY) ─────────────────────
-st.markdown("### Alumni Data Registry")
+# ─── 5. FINALIST ALUMNI DATA REGISTRY ───────────────────────────────────────
+st.markdown("### Finalist Alumni Data Registry")
 
-default_columns = [
-    "Full Name", 
-    "Award Year", 
-    "Academic / STEM Field Enrolled In", 
-    "Pathway Category", 
-    "Current Position / What They're Doing Now", 
-    "LinkedIn Profile"
+sector_filter_options = ["All Domains"] + list(df["STEM Domain Cluster"].unique())
+selected_sector = st.selectbox("Filter Registry by STEM Domain Cluster:", sector_filter_options)
+
+if selected_sector != "All Domains":
+    filtered_df = df[df["STEM Domain Cluster"] == selected_sector]
+else:
+    filtered_df = df.copy()
+
+display_cols = [col_name, "Award Year Clean", col_comp, col_field, "STEM Domain Cluster", "Employment Status", col_pos, col_linkedin]
+
+registry_table = filtered_df[display_cols].copy()
+registry_table.columns = [
+    "Full Name", "Award Year", "Competition", "Academic Field",
+    "STEM Domain Cluster", "Employment Status", "Current Position", "LinkedIn Profile"
 ]
 
-# Renders all records directly without needing a filter
 st.dataframe(
-    df[default_columns],
+    registry_table,
     use_container_width=True,
     hide_index=True
 )
