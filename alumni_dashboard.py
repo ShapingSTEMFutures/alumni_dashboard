@@ -97,7 +97,7 @@ def derive_stem_domain(row):
     pos = str(row[col_pos]).lower()
     
     if pos == "n/a" and fld == "n/a":
-        return "Untracked / Private Profile"
+        return "Untracked Profile"
     elif any(k in fld or k in pos for k in ["biotech", "bio", "genetics", "health", "cancer", "medical", "chemist", "microbiology", "life science"]):
         return "Biotechnology & Life Sciences"
     elif any(k in fld or k in pos for k in ["software", "data", "it", "information technology", "computer science", "ai", "ios"]):
@@ -139,7 +139,7 @@ with col1:
 with col2:
     st.markdown(f'<div class="metric-card"><div class="label">Verifiable LinkedIn Profiles</div><div class="value">{verifiable_profiles}</div></div>', unsafe_allow_html=True)
 with col3:
-    st.markdown(f'<div class="metric-card"><div class="label">Untracked / Private Profiles</div><div class="value">{untracked_profiles}</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="metric-card"><div class="label">Untracked Profiles</div><div class="value">{untracked_profiles}</div></div>', unsafe_allow_html=True)
 with col4:
     st.markdown(f'<div class="metric-card"><div class="label">Employed Industry / Research</div><div class="value">{employed_count}</div></div>', unsafe_allow_html=True)
 
@@ -154,7 +154,7 @@ with col_obs1:
     st.markdown("""
     <div class="obs-card">
         <h4>🧬 Discipline Specialization Bias</h4>
-        <p><b>Start Talking</b> acts primarily as a pipeline for <b>Biotechnology & Life Sciences</b> talent, whereas <b>Design for Change</b> feeds into <b>Software Engineering, AI & Data Systems</b>.</p>
+        <p><b>Start Talking</b> acts primarily as a pipeline for <b>Biotechnology & Life Sciences</b>, whereas <b>Design for Change</b> feeds into <b>Software Engineering, AI & Data Systems</b>.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -177,7 +177,7 @@ with col_obs3:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ─── 4. INTERACTIVE STEM DOMAIN VISUALIZATION ────────────────────────────────
-st.markdown("### Interactive STEM Domain & Ecosystem Matrix")
+st.markdown("### Interactive STEM Domain & Ecosystem")
 
 col_view_type, col_filter_comp = st.columns(2)
 
@@ -190,7 +190,7 @@ with col_view_type:
 
 with col_filter_comp:
     comp_filter = st.selectbox(
-        "Filter Competition Cohort:",
+        "Filter Competition:",
         options=["All Competitions", "Start Talking", "Design for Change"]
     )
 
