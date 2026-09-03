@@ -192,11 +192,11 @@ for i, (label, val) in enumerate(cards):
     ''', unsafe_allow_html=True)
 
 missing = (~view["LinkedIn"].apply(meaningful)).sum()
-st.markdown(f'<div class="untracked-note">Note on Profile Tracking: <b>{missing/n*100 if n else 0:.1f}%</b> ({missing}/{n}) have no LinkedIn link in the supplied registry. Public searches do not establish complete profile verification.</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="untracked-note">Note on Profile Tracking: <b>{missing/n*100 if n else 0:.1f}%</b> ({missing}/{n}) have no LinkedIn link. Public searches do not establish complete profile verification.</div>', unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# ─── ACADEMIC BREADTH & EMPLOYMENT ROW ────────────────────────────────────
+# ─── ACADEMIC & EMPLOYMENT ROW ────────────────────────────────────
 col_left, col_right = st.columns([1.1, 0.9], gap="large")
 
 with col_left:
