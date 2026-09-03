@@ -185,7 +185,7 @@ cards = [
     ("FINALIST ALUMNI", len(view), ""),
     ("EMPLOYED", positions, ""),
     ("INDUSTRY PLACEMENTS", placement_count, ""),
-    ("FURTHER STUDY", study_count, "Master's qualifications recorded"),
+    ("FURTHER STUDY", study_count, ""),
     ("ACADEMIC FIELDS COVERED", fields.nunique(), "")
 ]
 
@@ -198,8 +198,6 @@ for i, (label, val, note) in enumerate(cards):
         {note_html}
     </div>
     ''', unsafe_allow_html=True)
-
-st.caption("*Further study is a qualification indicator, not verified current enrolment.")
 
 missing = (~view["LinkedIn"].apply(meaningful)).sum()
 st.markdown(f'<div class="untracked-note">Note on Profile Tracking: <b>{missing/n*100 if n else 0:.1f}%</b> ({missing}/{n}) have no LinkedIn link in the supplied registry. Public searches do not establish complete profile verification.</div>', unsafe_allow_html=True)
