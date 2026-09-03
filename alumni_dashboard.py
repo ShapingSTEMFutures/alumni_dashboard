@@ -186,7 +186,7 @@ cards = [
     ("FINALIST ALUMNI", finalists if selected_activity == "All Activities" else len(view[view["Program"].isin(["Start Talking", "Design for Change"])]), ""),
     ("EMPLOYED", positions, ""),
     ("INDUSTRY PLACEMENTS", placement_count, ""),
-    ("FURTHER STUDY", study_count),
+    ("FURTHER STUDY", study_count, ""),
     ("ACADEMIC FIELDS COVERED", fields.nunique(), "")
 ]
 
