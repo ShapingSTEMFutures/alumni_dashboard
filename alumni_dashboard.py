@@ -1,8 +1,3 @@
-"""
-Run: streamlit run alumni_dashboard.py
-Place beside an alumni registry Excel workbook (e.g., alumni_data.xlsx or Final_Alumni_Registry_2026.xlsx).
-Requires streamlit, pandas, plotly and openpyxl.
-"""
 import io
 import json
 import re
@@ -95,7 +90,7 @@ def classify_employment(position):
 @st.cache_data
 def load_data():
     BASE = Path(__file__).resolve().parent
-    FILENAMES = ["Final_Alumni_Registry_2026.xlsx", "Alumni_Registry_Extended_2026.xlsx", "alumni_data_7.xlsx", "alumni_data_5.xlsx", "alumni_data_4.xlsx", "alumni_data.xlsx"]
+    FILENAMES = ["alumni_data.xlsx"]
     excel = next((base/name for base in [BASE, Path.cwd()] for name in FILENAMES if (base/name).exists()), None)
 
     if excel is None:
@@ -169,7 +164,7 @@ st.divider()
 
 # Interactive Activity Filter Dropdown
 all_activities = ["All Activities"] + sorted([p for p in df["Program"].unique() if p])
-selected_activity = st.selectbox("Activity / Competition Filter", all_activities)
+selected_activity = st.selectbox("Activity Filter", all_activities)
 
 view = df if selected_activity == "All Activities" else df[df["Program"] == selected_activity]
 n = len(view)
@@ -182,22 +177,19 @@ finalists = view["Program"].isin(["Start Talking", "Design for Change"]).sum()
 # ─── TOP METRIC CARDS ──────────────────────────────────────────────────────
 cols = st.columns(4)
 cards = [
-    ("FINALIST ALUMNI*", finalists if selected_activity == "All Activities" else len(view[view["Program"].isin(["Start Talking", "Design for Change"])]), "Competition records; finalist status unverified"),
-    ("INDUSTRY PLACEMENTS", placement_count, "Explicit internships / industrial placements"),
-    ("FURTHER STUDY", study_count, "Master's qualifications recorded; current study unknown"),
-    ("ACADEMIC FIELDS COVERED", fields.nunique(), f"Distinct field / qualification labels across {len(fields)} people")
+    ("FINALIST ALUMNI", finalists if selected_activity == "All Activities" else len(view[view["Program"].isin(["Start Talking", "Design for Change"])])),
+    ("INDUSTRY PLACEMENTS", placement_count),
+    ("FURTHER STUDY", study_count),
+    ("ACADEMIC FIELDS COVERED", fields.nunique())
 ]
 
-for i, (label, val, note) in enumerate(cards):
+for i, (label, val) in enumerate(cards):
     cols[i].markdown(f'''
     <div class="metric-card">
         <div class="label">{label}</div>
         <div class="value">{val}</div>
-        <div class="note">{note}</div>
     </div>
     ''', unsafe_allow_html=True)
-
-st.caption("*Finalist alumni uses competition records as a proxy; finalist status is not separately recorded. Study Tour records are excluded from this card. Further study is a qualification indicator, not verified current enrolment.")
 
 missing = (~view["LinkedIn"].apply(meaningful)).sum()
 st.markdown(f'<div class="untracked-note">Note on Profile Tracking: <b>{missing/n*100 if n else 0:.1f}%</b> ({missing}/{n}) have no LinkedIn link in the supplied registry. Public searches do not establish complete profile verification.</div>', unsafe_allow_html=True)
