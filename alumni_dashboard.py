@@ -1,3 +1,8 @@
+"""
+Run: streamlit run alumni_dashboard.py
+Place beside an alumni registry Excel workbook (e.g., alumni_data.xlsx, Final_Alumni_Registry_2026.xlsx, or Alumni_Registry_Extended_2026.xlsx).
+Requires streamlit, pandas, plotly and openpyxl.
+"""
 import io
 import json
 import re
@@ -29,13 +34,13 @@ h1,h2,h3,h4{font-family:'DM Serif Display',serif!important;color:#111827;}
     border: 1px solid #e5e7eb;
     border-left: 4px solid #2d7a5f;
     border-radius: 6px;
-    padding: 1.25rem 1.5rem;
+    padding: 1rem 1.25rem;
     margin-bottom: 0.5rem;
-    min-height: 120px;
+    min-height: 110px;
 }
-.metric-card .label { font-size: 0.75rem; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 0.25rem; }
-.metric-card .value { font-size: 2.75rem; font-weight: 600; color: #111827; line-height: 1.1; font-family: 'DM Sans', sans-serif; }
-.metric-card .note { font-size: 0.78rem; color: #6b7280; margin-top: 0.4rem; }
+.metric-card .label { font-size: 0.72rem; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 0.25rem; }
+.metric-card .value { font-size: 2.4rem; font-weight: 600; color: #111827; line-height: 1.1; font-family: 'DM Sans', sans-serif; }
+.metric-card .note { font-size: 0.75rem; color: #6b7280; margin-top: 0.3rem; }
 
 .badge { background: #e6f2ed; color: #2d7a5f; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: 500; float: right; margin-top: 5px; }
 .section-title { font-size: 2rem; margin-bottom: 0.2rem; }
@@ -68,7 +73,7 @@ def meaningful(value):
 def area(field):
     if not meaningful(field):
         return "Not recorded"
-    field = str(field).lower()
+    field = str(field).strip().lower()
     for terms, label in [(["biotech", "chemistry", "genetics", "environmental science", "health science"], AREAS[0]), 
                          (["information technology", "computer science", "software", "master of it", "cloud computing", "data analytics", "network design"], AREAS[1]), 
                          (["engineering", "mechatronics", "robotics", "physics", "photovoltaic"], AREAS[2]), 
@@ -154,7 +159,7 @@ def load_data():
 df, excel_filename = load_data()
 
 if df is None:
-    st.error("Place your alumni registry Excel file beside this script. Supported names include alumni_data.xlsx and Final_Alumni_Registry_2026.xlsx.")
+    st.error("Place your alumni registry Excel file beside this script. Supported names include alumni_data.xlsx.")
     st.stop()
 
 # ─── HEADER ────────────────────────────────────────────────────────────────
@@ -164,7 +169,7 @@ st.divider()
 
 # Interactive Activity Filter Dropdown
 all_activities = ["All Activities"] + sorted([p for p in df["Program"].unique() if p])
-selected_activity = st.selectbox("Activity Filter", all_activities)
+selected_activity = st.selectbox("Activity / Competition Filter", all_activities)
 
 view = df if selected_activity == "All Activities" else df[df["Program"] == selected_activity]
 n = len(view)
@@ -174,20 +179,24 @@ study_count = view["Study evidence"].notna().sum()
 fields = view.loc[view["Academic field"].apply(meaningful), "Academic field"]
 finalists = view["Program"].isin(["Start Talking", "Design for Change"]).sum()
 
-# ─── TOP METRIC CARDS ──────────────────────────────────────────────────────
-cols = st.columns(4)
+# ─── TOP METRIC CARDS (5 CARDS ROW) ────────────────────────────────────────
+cols = st.columns(5)
+
 cards = [
-    ("FINALIST ALUMNI", finalists if selected_activity == "All Activities" else len(view[view["Program"].isin(["Start Talking", "Design for Change"])])),
-    ("INDUSTRY PLACEMENTS", placement_count),
-    ("FURTHER STUDY", study_count),
-    ("ACADEMIC FIELDS COVERED", fields.nunique())
+    ("FINALIST ALUMNI", finalists if selected_activity == "All Activities" else len(view[view["Program"].isin(["Start Talking", "Design for Change"])]), ""),
+    ("EMPLOYED", positions, ""),
+    ("INDUSTRY PLACEMENTS", placement_count, ""),
+    ("FURTHER STUDY", study_count, "Master's qualifications recorded"),
+    ("ACADEMIC FIELDS COVERED", fields.nunique(), "")
 ]
 
-for i, (label, val) in enumerate(cards):
+for i, (label, val, note) in enumerate(cards):
+    note_html = f'<div class="note">{note}</div>' if note else ""
     cols[i].markdown(f'''
     <div class="metric-card">
         <div class="label">{label}</div>
         <div class="value">{val}</div>
+        {note_html}
     </div>
     ''', unsafe_allow_html=True)
 
@@ -196,7 +205,7 @@ st.markdown(f'<div class="untracked-note">Note on Profile Tracking: <b>{missing/
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# ─── ACADEMIC & EMPLOYMENT ROW ────────────────────────────────────
+# ─── ACADEMIC BREADTH & EMPLOYMENT ROW ────────────────────────────────────
 col_left, col_right = st.columns([1.1, 0.9], gap="large")
 
 with col_left:
