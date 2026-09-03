@@ -95,7 +95,7 @@ def classify_employment(position):
 @st.cache_data
 def load_data():
     BASE = Path(__file__).resolve().parent
-    FILENAMES = ["alumni_data.xlsx"]
+    FILENAMES = ["Alumni_Registry_Extended_2026.xlsx", "Final_Alumni_Registry_2026.xlsx", "alumni_data_8.xlsx", "alumni_data_7.xlsx", "alumni_data_5.xlsx", "alumni_data_4.xlsx", "alumni_data.xlsx"]
     excel = next((base/name for base in [BASE, Path.cwd()] for name in FILENAMES if (base/name).exists()), None)
 
     if excel is None:
@@ -159,7 +159,7 @@ def load_data():
 df, excel_filename = load_data()
 
 if df is None:
-    st.error("Place your alumni registry Excel file beside this script. Supported names include alumni_data.xlsx.")
+    st.error("Place your alumni registry Excel file beside this script. Supported names include alumni_data.xlsx and Final_Alumni_Registry_2026.xlsx.")
     st.stop()
 
 # ─── HEADER ────────────────────────────────────────────────────────────────
@@ -177,16 +177,15 @@ positions = view["Recorded role"].apply(meaningful).sum()
 placement_count = view["Placement evidence"].notna().sum()
 study_count = view["Study evidence"].notna().sum()
 fields = view.loc[view["Academic field"].apply(meaningful), "Academic field"]
-finalists = view["Program"].isin(["Start Talking", "Design for Change"]).sum()
 
 # ─── TOP METRIC CARDS (5 CARDS ROW) ────────────────────────────────────────
 cols = st.columns(5)
 
 cards = [
-    ("FINALIST ALUMNI", finalists if selected_activity == "All Activities" else len(view[view["Program"].isin(["Start Talking", "Design for Change"])]), ""),
+    ("FINALIST ALUMNI", len(view), ""),
     ("EMPLOYED", positions, ""),
     ("INDUSTRY PLACEMENTS", placement_count, ""),
-    ("FURTHER STUDY", study_count, ""),
+    ("FURTHER STUDY", study_count, "Master's qualifications recorded"),
     ("ACADEMIC FIELDS COVERED", fields.nunique(), "")
 ]
 
@@ -200,8 +199,10 @@ for i, (label, val, note) in enumerate(cards):
     </div>
     ''', unsafe_allow_html=True)
 
+st.caption("*Further study is a qualification indicator, not verified current enrolment.")
+
 missing = (~view["LinkedIn"].apply(meaningful)).sum()
-st.markdown(f'<div class="untracked-note">Note on Profile Tracking: <b>{missing/n*100 if n else 0:.1f}%</b> ({missing}/{n}) have no LinkedIn link. Public searches do not establish complete profile verification.</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="untracked-note">Note on Profile Tracking: <b>{missing/n*100 if n else 0:.1f}%</b> ({missing}/{n}) have no LinkedIn link in the supplied registry. Public searches do not establish complete profile verification.</div>', unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
